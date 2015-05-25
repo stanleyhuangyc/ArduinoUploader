@@ -57,7 +57,19 @@ static string ResetLeonardo(const char* port)
 	return uploadPort;
 }
 
-int CArduinoBuilder::UploadToArduino(const char* eepfile, const char* serial, int baudrate, const char* avrpath)
+void ResetBoard(const char* port)
+{
+	ctb::SerialPort serialPort;
+	char devname[64];
+	sprintf(devname, "\\\\.\\%s", port);
+	if (serialPort.Open(devname) == 0) {
+		serialPort.SetLineState(ctb::LinestateDtr);
+		Sleep(10);
+		serialPort.SetLineState(ctb::LinestateNull);
+	}
+}
+
+int CArduinoBuilder::UploadToArduino(const char* eepfile, const char* serial, int ispBaudrate, const char* avrpath)
 {
     char cmd[512];
 	char *p;
@@ -95,10 +107,10 @@ int CArduinoBuilder::UploadToArduino(const char* eepfile, const char* serial, in
 #ifdef WIN32
 		p += sprintf(p, "\"%savrdude.exe\" -C %savrdude.conf", avrpath, avrpath);
 		if (!stricmp(serial, "usbasp")) {
-			p += sprintf(p, " -cusbasp -Pusb");
-		} else if (baudrate) {
+			p += sprintf(p, " -F -cusbasp -Pusb");
+		} else if (ispBaudrate) {
 			// ArduinoISP
-			p += sprintf(p, " -cstk500v1 -P\\\\.\\%s -b%d", serial, baudrate);
+			p += sprintf(p, " -cstk500v1 -P\\\\.\\%s -b%d", serial, ispBaudrate);
 		} else if (!strcmp(board->mcu, "atmega32u4")) {
 			p += sprintf(p, " -cavr109 -P\\\\.\\%s -b%d -D", uploadPort.c_str(), board->baudrate);
 		} else if (!strcmp(board->mcu, "atmega2560")) {
@@ -109,18 +121,21 @@ int CArduinoBuilder::UploadToArduino(const char* eepfile, const char* serial, in
 #else
 		p += sprintf(p, "%savrdude -C /etc/avrdude.conf", avrpath);
 		if (!strcmp(serial, "usbasp")) {
-			p += sprintf(p, " -cusbasp -Pusb");
+			p += sprintf(p, " -F -cusbasp -Pusb");
 		} else if (!strcmp(board->mcu, "atmega32u4")) {
-			p += sprintf(p, " -cavr109 -P%s -b%d", uploadPort, board->baudrate);
+			p += sprintf(p, " -cavr109 -P%s -b%d -D", uploadPort.c_str(), board->baudrate);
 		} else if (!strcmp(board->mcu, "atmega2560")) {
-			p += sprintf(p, " -cwiring -P%s -b%d", serial, board->baudrate);
+			p += sprintf(p, " -cwiring -P%s -b%d -D", serial, board->baudrate);
 		} else {
-			p += sprintf(p, " -carduino -P%s -b%d", serial, board->baudrate);
+			p += sprintf(p, " -carduino -P%s -b%d -D", serial, board->baudrate);
 		}
 #endif
 		p += sprintf(p, " -V -p%s -Uflash:w:\"%s\":i", board->mcu, hexfile);
 		if (eepfile) {
 			p += sprintf(p, " -Ueeprom:w:\"%s\":i", eepfile);
+		}
+		if (!stricmp(serial, "usbasp")) {
+			//p += sprintf(p, " -U lock:w:0xe8:m");
 		}
 		if (ShellExec(&proc, cmd) != 0) {
 			break;
