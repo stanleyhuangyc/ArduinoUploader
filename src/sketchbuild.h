@@ -15,7 +15,7 @@
 #define SOURCE_HEX 1
 #define SOURCE_ERROR -1
 
-#define BUILDER_VERSION "0.8.3"
+#define BUILDER_VERSION "0.9.0"
 
 #define BOARD_FLAG_1200BPS_RESET 1
 
@@ -25,6 +25,7 @@ typedef struct {
 	const char* variant;
 	int baudrate;
 	const char* id;
+	const char* defines;
 	int progMem;
 	int dataMem;
 	int eepMem;
@@ -39,7 +40,7 @@ typedef enum {
 
 class CArduinoBuilder {
 public:
-	CArduinoBuilder():board(0),progress(0),state(STATE_IDLE),baudrate(0),startTime(0)
+	CArduinoBuilder():board(0),progress(0),state(STATE_IDLE),baudrate(0),startTime(0),corefile(0),libfile(0)
 	{
 		memset(&proc, 0, sizeof(proc));
 		memset(&target, 0, sizeof(target));
@@ -69,9 +70,9 @@ public:
 		int dataBytes;
 		int eepBytes;
 	} target;
-	bool WaitProcess()
+	bool WaitProcess(DWORD timeout)
 	{
-		return ShellWait(&proc, 0) != 0;
+		return ShellWait(&proc, timeout) != 0;
 	}
 	int ReadProcessConsole();
 	virtual void ConsoleOutput(const char* text, const char* s = 0);
@@ -80,6 +81,7 @@ public:
 	STATE state;
 	DWORD startTime;
 private:
+	int ScanSourceCode(const char* dir);
 	int GenSourceFiles(const char* sketch, const char* srcpath);
 	bool ParseSketch(const char* sketch);
 	std::string GetFileName(const char* path);
