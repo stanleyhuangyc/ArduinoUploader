@@ -9,9 +9,9 @@
 using namespace std;
 
 void ConsoleOutput(const char* text, const char* s = 0);
-extern char* appdir;;
+extern char* appdir;
 
-#define COMPILE_OPTS " -s -Os -pipe -fno-exceptions -ffunction-sections -fdata-sections -MMD -DARDUINO=104"
+#define COMPILE_OPTS " -s -pipe -fno-exceptions -ffunction-sections -fdata-sections -MMD -DARDUINO=10604"
 
 bool CArduinoBuilder::ParseSketch(const char* sketch)
 {
@@ -80,22 +80,21 @@ int CArduinoBuilder::GenSourceFiles(const char* sketch, const char* srcpath)
 }
 
 BOARD_CONFIG boards[] = {
-	{"Arduino Uno", "atmega328p", "standard", 115200, "uno", 32768, 2048, 1024},
-	{"Arduino Leonardo", "atmega32u4", "leonardo", 57600, "leonardo", 32768, 2560, 1024},
-	{"Arduino Esplora", "atmega32u4", "leonardo", 57600, "esplora", 32768, 2560, 1024},
-	{"Arduino Micro", "atmega32u4", "micro", 57600, "micro", 32768, 2560, 1024},
-	{"Arduino Duemilanove (328)", "atmega328p", "standard", 57600, "duemilanove328", 32768, 2048, 1024},
-	{"Arduino Duemilanove (168)", "atmega168", "standard", 19200, "duemilanove168", 16384, 1024, 512},
-	{"Arduino Nano (328)", "atmega328p", "eightanaloginputs", 57600, "nano328", 32768, 2048, 1024},
-	{"Arduino Nano (168)", "atmega168", "eightanaloginputs", 19200, "nano168", 16384, 1024, 512},
-	{"Arduino Mini (328)", "atmega328p", "eightanaloginputs", 57600, "mini328", 32768, 2048, 1024},
-	{"Arduino Mini (168)", "atmega168", "eightanaloginputs", 19200, "mini168", 16384, 1024, 512},
-	{"Arduino Pro Mini (328)", "atmega328p", "standard", 57600, "promini328", 32768, 2048, 1024},
-	{"Arduino Pro Mini (168)", "atmega168p", "standard", 19200, "promini168", 16384, 1024, 512},
-	{"Arduino Mega 2560/ADK", "atmega2560", "mega", 115200, "mega2560", 262144, 8192, 4096},
-	{"Arduino Mega 1280", "atmega1280", "mega", 57600, "mega1280", 131072, 8192, 4096},
-	{"Arduino Mega 8", "atmega8", "standard", 19200, "mega8", 8192, 1024, 512},
-	{"Microduino Core+ (644P)", "atmega644p", "plus", 115200, "uduino644p", 65536, 4096, 2048},
+	{"Arduino Uno", "atmega328p", "standard", 115200, "uno", "-DARDUINO_AVR_UNO", 32768, 2048, 1024},
+	{"Arduino Leonardo", "atmega32u4", "leonardo", 57600, "leonardo", "-DARDUINO_AVR_LEONARDO", 32768, 2560, 1024},
+	{"Arduino Esplora", "atmega32u4", "leonardo", 57600, "esplora", "-DARDUINO_AVR_ESPLORA", 32768, 2560, 1024},
+	{"Arduino Micro", "atmega32u4", "micro", 57600, "micro", "-DARDUINO_MICRO", 32768, 2560, 1024},
+	{"Arduino Duemilanove (328)", "atmega328p", "standard", 57600, "duemilanove328", "-DARDUINO_AVR_DUEMILANOVE", 32768, 2048, 1024},
+	{"Arduino Duemilanove (168)", "atmega168p", "standard", 19200, "duemilanove168", "-DARDUINO_AVR_DUEMILANOVE", 16384, 1024, 512},
+	{"Arduino Nano (328)", "atmega328p", "eightanaloginputs", 57600, "nano328", "-DARDUINO_AVR_NANO", 32768, 2048, 1024},
+	{"Arduino Nano (168)", "atmega168p", "eightanaloginputs", 19200, "nano168", "-DARDUINO_AVR_NANO", 16384, 1024, 512},
+	{"Arduino Mini (328)", "atmega328p", "eightanaloginputs", 57600, "mini328", "-DARDUINO_AVR_MINI", 32768, 2048, 1024},
+	{"Arduino Mini (168)", "atmega168p", "eightanaloginputs", 19200, "mini168", "-DARDUINO_AVR_MINI", 16384, 1024, 512},
+	{"Arduino Pro Mini (328)", "atmega328p", "standard", 57600, "promini328", "-DARDUINO_AVR_PRO", 32768, 2048, 1024},
+	{"Arduino Pro Mini (168)", "atmega168p", "standard", 19200, "promini168", "-DARDUINO_AVR_PRO", 16384, 1024, 512},
+	{"Arduino Mega 2560/ADK", "atmega2560", "mega", 115200, "mega2560", "-DARDUINO_AVR_MEGA2560", 262144, 8192, 4096},
+	{"Arduino Mega 1280", "atmega1280", "mega", 57600, "mega1280", "-DARDUINO_AVR_MEGA", 131072, 8192, 4096},
+	{"Arduino Mega 8", "atmega8", "standard", 19200, "mega8", "-DARDUINO_AVR_NG", 8192, 1024, 512},
 	{0},
 };
 
@@ -103,9 +102,18 @@ std::string CArduinoBuilder::GetCompileOpts()
 {
 	stringstream opts;
 	stringstream dir;
+
+	if (board->progMem >= 65536) {
+		// faster code on MCU with at least 64K program memory
+		opts << " -O2";
+	} else {
+		opts << " -Os";
+	}
+
 	opts << COMPILE_OPTS
 		<< " -DF_CPU=" << freq << "000000L"
 		<< " -mmcu=" << board->mcu
+		<< " -DARDUINO_ARCH_AVR " << board->defines
 		<< " -Iarduino/hardware/arduino/cores/arduino -Iarduino/hardware/arduino/variants/" << board->variant;
 	for (int i = 0; i < (int)libs.size(); i++) {
 		if (libs[i].empty())
@@ -186,6 +194,74 @@ static char* LoadTextFile(const char* filename)
 	return content;
 }
 
+int CArduinoBuilder::ScanSourceCode(const char* dir)
+{
+	char filepath[MAX_PATH];
+	char fn[MAX_PATH];
+	int ret = SUCCESS;
+	char* sketchFileName = 0;
+
+	if (sketchPath) {
+		sketchFileName = strrchr((char*)sketchPath, '/');
+		if (!sketchFileName) sketchFileName = strrchr((char*)sketchPath, '\\');
+		if (sketchFileName) sketchFileName++;
+	}
+
+	if (ReadDir(buildDir, fn) != 0) {
+		return ERROR_GENERIC;
+	}
+	// scan all source code files in the directory for referenced libraries
+	do {
+		char *p = strrchr((char*)fn, '.');
+		if (!p) continue;
+		bool isSketch = false;
+
+		if (sketchFileName && !stricmp(sketchFileName, fn)) {
+			// main sketch already processed;
+			continue;
+		}
+
+		if (!_stricmp(p, ".pde") || !_stricmp(p, ".ino")) {
+			// sketch file, need to generate source code file
+			isSketch = true;
+		} else if (_stricmp(p, ".c") && _stricmp(p, ".cpp")) {
+			// not recognizable file extension
+			continue;
+		}
+
+		sprintf(filepath, "%s/%s", buildDir, fn);
+		char *content = LoadTextFile(filepath);
+		if (!content) {
+			// unable to load the file
+			ConsoleOutput("Unable to load file - %s\r\n", filepath);
+			continue;
+		}
+
+		// avoid including other main sketch
+
+		if (ParseSketch(content) && isSketch) {
+			// need to modify source code
+			if (strstr(content, "void setup()") || strstr(content, "void loop()")) {
+				// do not include sketch with setup() or loop() as we already have them in the main sketch
+			} else {
+				char buf[MAX_PATH];
+				sprintf(buf, "%s/%s.cpp", workDir, fn);
+				int ret = GenSourceFiles(content, filepath);
+				if (ret == SOURCE_OK) {
+					sources.push_back(buf);
+				} else {
+					ret = ERROR_ANALYZE_SKETCH;
+				}
+			}
+			free(content);
+		} else {
+			free(content);
+			sources.push_back(filepath);
+		}		
+	} while (ReadDir(0, fn) == 0);
+	return ret;
+}
+
 int CArduinoBuilder::BuildSketch()
 {
 	int ret = SUCCESS;
@@ -196,12 +272,7 @@ int CArduinoBuilder::BuildSketch()
 	int progress = 0;
 	int totalsteps = 2;
 	bool corebuilt;
-	string srcfn;
 	
-	if (hexfile) {
-		srcfn = GetFileName(sketchPath);
-	}
-
 	objs.clear();
 	libs.clear();
 	syslibs.clear();
@@ -215,54 +286,28 @@ int CArduinoBuilder::BuildSketch()
 		syslibs.push_back(fn);
 	} while(ReadDir(0, fn) == 0);
 
-	// pre-processing
-	if (ReadDir(buildDir, fn) != 0) {
-		return ERROR_GENERIC;
-	}
-	// scan all source code files in the directory for referenced libarries
-	do {
-		char *p = strrchr((char*)fn, '.');
-		if (!p) continue;
-		bool isMain = (_stricmp(srcfn.c_str(), fn) == 0);
-
-		sprintf(buf, "%s/%s", buildDir, fn);
-
-		if (!isMain && (!_stricmp(p, ".c") || !_stricmp(p, ".cpp"))) {
-			char *content = LoadTextFile(buf);
-			if (content) {
-				ParseSketch(content);
-				free(content);
-				sources.push_back(buf);
-			}
-			continue;
-		}
-		if (!isMain && _stricmp(p, ".pde") && _stricmp(p, ".ino")) 
-			continue;
-
-		// load sketch content
-		char *content = LoadTextFile(buf);
+	if (hexfile) {
+		// parse main sketch file
+		char *content = LoadTextFile(sketchPath);
 		if (!content) {
-			ConsoleOutput("Unable to load source code file - %s\r\n", buf);
-			continue;
+			ConsoleOutput("Unable to load main sketch file - %s\r\n", buf);
+			return ERROR_ANALYZE_SKETCH;
 		}
-
-		// avoid including other main sketch
-		if (!srcfn.empty() && !isMain && (strstr(content, "void setup()") || strstr(content, "void loop()"))) {
-			free(content);
-			continue;
-		}
-
 		if (ParseSketch(content)) {
 			// need to modify source code
-			sprintf(buf, "%s/%s.cpp", workDir, fn);
+			_snprintf(buf, sizeof(buf), "%s/%s.cpp", workDir, GetFileName(sketchPath).c_str());
 			ret = GenSourceFiles(content, buf);
 			free(content);
 			if (ret != SOURCE_OK) {
 				return ERROR_ANALYZE_SKETCH;
 			}
+			sources.push_back(buf);
+		} else {
+			sources.push_back(sketchPath);
 		}
-		sources.push_back(buf);
-	} while (ReadDir(0, fn) == 0);
+		free(content);
+	}
+	ScanSourceCode(buildDir);
 	totalsteps += sources.size();
 
 	corebuilt = (corefile && IsFileExist(corefile));
@@ -301,11 +346,12 @@ int CArduinoBuilder::BuildSketch()
 		// no need to compile system library if there is a local one so remove it's reference
 		const char* libname = libs[i].c_str();
 		totalsteps++;
+		string srcname = libname;
+		srcname += ".cpp";
 		for (int j = 0; j < (int)sources.size(); j++) {
-			string srcname = GetFileNameNoExt(sources[j].c_str());
-			if (!stricmp(libname, srcname.c_str())) {
+			if (!_stricmp(GetFileName(sources[j].c_str()).c_str(), srcname.c_str())) {
 				// found reference library, remove it
-				//ConsoleOutput("[%s] is custom library\r\n", libname);
+				ConsoleOutput("[%s] is local library\r\n", libname);
 				libs[i] = "";
 				totalsteps--;
 			}
@@ -317,11 +363,11 @@ int CArduinoBuilder::BuildSketch()
 		const char* tool;
 
 		// compile main cpp file
-		if (strstr(board->name, "Leonardo")) {
+		if (!strcmp(board->id, "leonardo")) {
 			extraopts = " -DUSB_VID=0x2341 -DUSB_PID=0x8036";
-		} else if (strstr(board->name, "Micro")) {
+		} else if (!strcmp(board->id, "micro")) {
 			extraopts = " -DUSB_VID=0x2341 -DUSB_PID=0x8037";
-		} else if (strstr(board->name, "Esplora")) {
+		} else if (!strcmp(board->id, "esplora")) {
 			extraopts = " -DUSB_VID=0x2341 -DUSB_PID=0x803C";
 		}
 		
